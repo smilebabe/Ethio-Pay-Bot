@@ -793,7 +793,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if data == "send_money":
         await query.edit_message_text(
-            "💸 *Send Money*\n\nUsage: `/send [amount] [phone_number]`\nExample: `/send 500 0961393001`",
+            "💸 *Send Money*\n\nUsage: `/send [amount] [phone_number]`\nExample: `/send 500 09613930011`",
             parse_mode='Markdown'
         )
     
