@@ -12,7 +12,7 @@
   },
   "env": {
     "TELEGRAM_TOKEN": {
-      "description": 8175654585:AAHkKi9IVa1C0vCknGHQ9ildFgsiwXvmXG4,
+      "description": "8175654585:AAHkKi9IVa1C0vCknGHQ9ildFgsiwXvmXG4",
     },
     "ENVIRONMENT": {
       "description": "Runtime environment",
