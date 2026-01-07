@@ -1,238 +1,508 @@
+#!/usr/bin/env python3
+"""
+SHEGER - Ethiopian Super-App Bot
+Transforming from Ethio-Pay-Bot to full-scale platform
+"""
+
 import os
 import logging
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext, CallbackQueryHandler
-from datetime import datetime
+from datetime import datetime, timedelta
+from typing import Dict, List, Optional
 
-# Setup logging
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    MessageHandler,
+    CallbackQueryHandler,
+    ContextTypes,
+    filters
+)
+
+# Enable logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
-# Get token from Railway
-TOKEN = os.environ.get("TOKEN")
-if not TOKEN:
-    print("❌ ERROR: No TOKEN found in Railway variables!")
-    print("Please set TOKEN in Railway → Variables")
-    exit(1)
+# ======================
+# DATABASE SIMULATION (Start with simple dict, upgrade later)
+# ======================
+users_db = {}  # user_id -> user_data
+transactions_db = []
+listings_db = []
 
-print(f"✅ Bot starting with token: {TOKEN[:15]}...")
+# User tiers
+TIER_BASIC = "basic"
+TIER_PRO = "pro"
+TIER_ENTERPRISE = "enterprise"
 
-# Forex rates
-FOREX_RATES = {
-    "black_market": 57.5,
-    "bank_rate": 56.3,
-    "our_rate": 57.2,
-    "updated": datetime.now().strftime("%Y-%m-%d %H:%M")
+# Pricing in ETB
+PRICING = {
+    TIER_BASIC: {"monthly": 0, "yearly": 0},
+    TIER_PRO: {"monthly": 149, "yearly": 1499},
+    TIER_ENTERPRISE: {"monthly": 999, "yearly": 9999}
 }
 
-async def start(update: Update, context: CallbackContext):
+# Transaction fees (in percentage)
+FEES = {
+    TIER_BASIC: 2.5,
+    TIER_PRO: 1.5,
+    TIER_ENTERPRISE: 0.8
+}
+
+# ======================
+# HELPER FUNCTIONS
+# ======================
+def get_user_tier(user_id: int) -> str:
+    """Get user's subscription tier"""
+    if user_id not in users_db:
+        # New user - default to basic
+        users_db[user_id] = {
+            "tier": TIER_BASIC,
+            "joined": datetime.now(),
+            "subscription_end": None,
+            "balance": 0.0,
+            "trust_score": 50,
+            "free_listings_used": 0,
+            "phone": None
+        }
+    return users_db[user_id]["tier"]
+
+def can_user_list_item(user_id: int) -> bool:
+    """Check if user can create new listing based on tier"""
+    tier = get_user_tier(user_id)
+    
+    if tier == TIER_BASIC:
+        # Basic users get 3 free listings per month
+        user_data = users_db[user_id]
+        if user_data["free_listings_used"] < 3:
+            return True
+        return False
+    # Pro and Enterprise have unlimited
+    return True
+
+def calculate_fee(amount: float, user_id: int) -> float:
+    """Calculate transaction fee based on user tier"""
+    tier = get_user_tier(user_id)
+    fee_percentage = FEES[tier]
+    return (amount * fee_percentage) / 100
+
+def is_premium_user(user_id: int) -> bool:
+    """Check if user has paid subscription"""
+    tier = get_user_tier(user_id)
+    return tier in [TIER_PRO, TIER_ENTERPRISE]
+
+# ======================
+# COMMAND HANDLERS
+# ======================
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Send welcome message with main menu"""
+    user = update.effective_user
+    
+    # Check if this is a migrated user from Ethio-Pay-Bot
+    welcome_msg = f"""🌟 *Welcome to SHEGER* 🇪🇹
+
+*Your All-in-One Ethiopian Super-App*
+
+Account: @{user.username}
+Tier: {get_user_tier(user.id).upper()}
+
+*Main Features:*
+💸 `/send` - Send money (Fee: {FEES[get_user_tier(user.id)]}%)
+🛍️ `/market` - Buy & sell goods
+🔧 `/gigs` - Find work opportunities
+🏠 `/property` - Property listings
+📚 `/learn` - Skills & courses
+⚙️ `/profile` - Your account & settings
+
+*New Premium Features:*
+✅ Lower transaction fees
+✅ Unlimited marketplace listings
+✅ Priority access to jobs
+✅ Advanced analytics
+
+Upgrade: `/premium`
+Support: `/help`
+"""
+    
     keyboard = [
-        [InlineKeyboardButton("💰 PayPal Solutions", callback_data='paypal')],
-        [InlineKeyboardButton("📈 Forex Rates", callback_data='rate')],
-        [InlineKeyboardButton("⚠️ Avoid Scams", callback_data='scam')],
-        [InlineKeyboardButton("📖 Buy Guide (500 ETB)", callback_data='guide')],
-        [InlineKeyboardButton("🤝 Connect Agent", callback_data='agent')],
+        [
+            InlineKeyboardButton("💸 Send Money", callback_data="send_money"),
+            InlineKeyboardButton("🛍️ Marketplace", callback_data="marketplace")
+        ],
+        [
+            InlineKeyboardButton("🔧 Find Work", callback_data="gigs"),
+            InlineKeyboardButton("📚 Learn Skills", callback_data="learn")
+        ],
+        [
+            InlineKeyboardButton("⚙️ Profile", callback_data="profile"),
+            InlineKeyboardButton("⭐ Upgrade", callback_data="upgrade")
+        ]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await update.message.reply_text(
-        "🤖 *Welcome to EthioPay Bot!*\n\n"
-        "*I solve Ethiopian payment problems:*\n"
-        "• Receive PayPal/Upwork money\n"
-        "• Best forex rates\n"
-        "• Verified agents\n"
-        "• Tax guidance\n\n"
-        "Tap a button below or type your question!",
+        welcome_msg,
         parse_mode='Markdown',
         reply_markup=reply_markup
     )
 
-async def button(update: Update, context: CallbackContext):
+async def premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show premium pricing tiers"""
+    user_tier = get_user_tier(update.effective_user.id)
+    
+    message = f"""🚀 *SHEGER Premium Plans*
+
+*Current Plan:* {user_tier.upper()}
+
+*1. SHEGER PRO* - 149 ETB/month
+• Transaction fee: 1.5% (vs 2.5% Basic)
+• Unlimited marketplace listings
+• Priority gig access
+• Business profile badge
+• Daily limit: 50,000 ETB
+• 24h support response
+
+*2. SHEGER ENTERPRISE* - 999 ETB/month
+• Transaction fee: 0.8%
+• Bulk payment processing
+• Custom business portal
+• Advanced API access
+• Dedicated account manager
+• Unlimited transactions
+• White-label solutions
+
+*Special Launch Offer:*
+First month FREE for all upgrades!
+Use code: `SHEGERLAUNCH`
+
+To upgrade, choose a plan below:"""
+    
+    keyboard = [
+        [InlineKeyboardButton("🟢 PRO Monthly - 149 ETB", callback_data="upgrade_pro_monthly")],
+        [InlineKeyboardButton("🟢 PRO Yearly - 1,499 ETB (Save 16%)", callback_data="upgrade_pro_yearly")],
+        [InlineKeyboardButton("🔵 ENTERPRISE Monthly - 999 ETB", callback_data="upgrade_enterprise_monthly")],
+        [InlineKeyboardButton("🔵 ENTERPRISE Yearly - 9,999 ETB (Save 16%)", callback_data="upgrade_enterprise_yearly")],
+        [InlineKeyboardButton("📞 Contact Sales", callback_data="contact_sales")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(
+        message,
+        parse_mode='Markdown',
+        reply_markup=reply_markup
+    )
+
+async def send_money(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Send money command"""
+    user_id = update.effective_user.id
+    user_tier = get_user_tier(user_id)
+    
+    if len(context.args) < 2:
+        await update.message.reply_text(
+            f"Usage: `/send [amount] [phone_number]`\n"
+            f"Example: `/send 500 0961393001`\n\n"
+            f"*Your fee:* {FEES[user_tier]}%\n"
+            f"*Daily limit:* {'5,000' if user_tier == TIER_BASIC else '50,000' if user_tier == TIER_PRO else 'Unlimited'} ETB",
+            parse_mode='Markdown'
+        )
+        return
+    
+    try:
+        amount = float(context.args[0])
+        phone = context.args[1]
+        
+        # Calculate fee
+        fee = calculate_fee(amount, user_id)
+        total = amount + fee
+        
+        # Check if basic user exceeds limit
+        if user_tier == TIER_BASIC and amount > 5000:
+            await update.message.reply_text(
+                "❌ *Limit Exceeded*\n"
+                "Basic users can send max 5,000 ETB per day.\n"
+                "Upgrade to PRO for 50,000 ETB limit: `/premium`",
+                parse_mode='Markdown'
+            )
+            return
+        
+        message = f"""✅ *Payment Ready*
+
+To: {phone}
+Amount: {amount:,.2f} ETB
+Fee ({FEES[user_tier]}%): {fee:,.2f} ETB
+Total: {total:,.2f} ETB
+
+*Payment Methods:*
+1. telebirr
+2. M-Pesa Ethiopia
+3. CBE Birr
+4. Cash pickup
+
+Choose payment method:"""
+        
+        keyboard = [
+            [
+                InlineKeyboardButton("telebirr", callback_data=f"pay_telebirr_{amount}_{phone}"),
+                InlineKeyboardButton("M-Pesa", callback_data=f"pay_mpesa_{amount}_{phone}")
+            ],
+            [
+                InlineKeyboardButton("CBE Birr", callback_data=f"pay_cbe_{amount}_{phone}"),
+                InlineKeyboardButton("Cash", callback_data=f"pay_cash_{amount}_{phone}")
+            ]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(
+            message,
+            parse_mode='Markdown',
+            reply_markup=reply_markup
+        )
+        
+    except ValueError:
+        await update.message.reply_text("❌ Invalid amount. Please enter a number.")
+
+async def market(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Marketplace command"""
+    user_id = update.effective_user.id
+    
+    if not context.args:
+        # Show marketplace options
+        message = """🛍️ *SHEGER Marketplace*
+
+Buy and sell goods locally!
+
+*Categories:*
+• Electronics 📱
+• Fashion 👕
+• Home & Garden 🏡
+• Vehicles 🚗
+• Services 🔧
+• Property 🏠
+
+*Commands:*
+`/market buy [item]` - Search for items
+`/market sell [item] [price]` - List item for sale
+`/market mine` - Your listings
+`/market featured` - Premium listings
+
+You have *unlimited listings* with PRO/Enterprise!
+Basic: 3 free listings/month"""
+        
+        keyboard = [
+            [
+                InlineKeyboardButton("🛒 Browse", callback_data="browse_market"),
+                InlineKeyboardButton("📤 Sell Item", callback_data="sell_item")
+            ],
+            [
+                InlineKeyboardButton("⭐ Featured", callback_data="featured_items"),
+                InlineKeyboardButton("📈 My Listings", callback_data="my_listings")
+            ]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(
+            message,
+            parse_mode='Markdown',
+            reply_markup=reply_markup
+        )
+        return
+    
+    # Handle subcommands
+    subcommand = context.args[0].lower()
+    
+    if subcommand == "sell":
+        if len(context.args) < 3:
+            await update.message.reply_text("Usage: `/market sell [item] [price] [location?]`")
+            return
+        
+        # Check if user can list
+        if not can_user_list_item(user_id):
+            await update.message.reply_text(
+                "❌ *Listing Limit Reached*\n"
+                "Basic users get 3 free listings per month.\n"
+                "Upgrade to PRO for unlimited: `/premium`",
+                parse_mode='Markdown'
+            )
+            return
+        
+        item = " ".join(context.args[1:-1])
+        price = context.args[-1]
+        location = context.args[2] if len(context.args) > 3 else "Addis Ababa"
+        
+        # Record the listing
+        if get_user_tier(user_id) == TIER_BASIC:
+            users_db[user_id]["free_listings_used"] += 1
+        
+        listings_db.append({
+            "user_id": user_id,
+            "item": item,
+            "price": price,
+            "location": location,
+            "timestamp": datetime.now(),
+            "premium": is_premium_user(user_id)
+        })
+        
+        await update.message.reply_text(
+            f"✅ *Item Listed Successfully!*\n\n"
+            f"*Item:* {item}\n"
+            f"*Price:* {price} ETB\n"
+            f"*Location:* {location}\n\n"
+            f"Listings used this month: {users_db[user_id].get('free_listings_used', 0)}/3",
+            parse_mode='Markdown'
+        )
+
+async def profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show user profile"""
+    user = update.effective_user
+    user_id = user.id
+    user_data = users_db.get(user_id, {})
+    tier = get_user_tier(user_id)
+    
+    # Calculate stats
+    user_transactions = [t for t in transactions_db if t.get("user_id") == user_id]
+    user_listings = [l for l in listings_db if l.get("user_id") == user_id]
+    
+    message = f"""⚙️ *Your SHEGER Profile*
+
+*Account Info:*
+Username: @{user.username}
+Tier: {tier.upper()}
+Joined: {user_data.get('joined', datetime.now()).strftime('%Y-%m-%d')}
+Trust Score: {user_data.get('trust_score', 50)}/100
+
+*Usage Stats:*
+Transactions: {len(user_transactions)}
+Listings: {len(user_listings)}
+Balance: {user_data.get('balance', 0):,.2f} ETB
+
+*Subscription:*
+Current: {tier.upper()}
+Expires: {user_data.get('subscription_end', 'Never') if user_data.get('subscription_end') else 'Never'}
+
+*Actions:*
+`/premium` - Upgrade plan
+`/balance` - Check balance
+`/history` - Transaction history
+`/verify` - Verify account
+`/help` - Support"""
+    
+    keyboard = [
+        [InlineKeyboardButton("⭐ Upgrade Plan", callback_data="upgrade")],
+        [InlineKeyboardButton("📊 View Stats", callback_data="stats")],
+        [InlineKeyboardButton("⚙️ Settings", callback_data="settings")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(
+        message,
+        parse_mode='Markdown',
+        reply_markup=reply_markup
+    )
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Help command"""
+    await update.message.reply_text(
+        """🆘 *SHEGER Help Center*
+
+*Quick Commands:*
+`/start` - Main menu
+`/send [amount] [phone]` - Send money
+`/market` - Buy & sell
+`/gigs` - Find work
+`/premium` - Upgrade account
+`/profile` - Your profile
+`/help` - This message
+
+*Support Channels:*
+📞 Support: @ShegerSupport
+🐛 Report Bug: @ShegerBugs
+💡 Suggestions: @ShegerIdeas
+📰 News: @ShegerNews
+
+*Business Hours:*
+Mon-Fri: 8:00 AM - 6:00 PM EAT
+Sat: 9:00 AM - 1:00 PM EAT
+
+*Emergency Contact:*
++251 963163418""",
+        parse_mode='Markdown'
+    )
+
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle inline button clicks"""
     query = update.callback_query
     await query.answer()
     
-    if query.data == 'paypal':
-        response = """💰 *3 Ways to Access PayPal in Ethiopia:*
-
-1️⃣ *Family Abroad Method*
-   • Relative receives PayPal
-   • Transfers to their bank
-   • Sends you via Telebirr
-   📊 *Fees:* 2-5%
-
-2️⃣ *Payoneer Bridge*
-   • Create Payoneer account
-   • Receive to Payoneer
-   • Withdraw to Ethiopian bank
-   📊 *Fees:* 1.8-2.5%
-
-3️⃣ *Direct Bank Transfer* (Not recommended)
-   • Bank converts at official rate
-   • You lose 15-25%
-   📊 *Fees:* 20-30%
-
-📖 *Full step-by-step guide:* /guide"""
-        
-    elif query.data == 'rate':
-        response = f"""📈 *Today's Forex Rates ({FOREX_RATES['updated']})*
-
-• *Black Market:* $1 = {FOREX_RATES['black_market']} ETB
-• *Bank Rate:* $1 = {FOREX_RATES['bank_rate']} ETB
-• *Our Network:* $1 = {FOREX_RATES['our_rate']} ETB ✅
-
-*Need to exchange?* Type 'agent' or /agent"""
-        
-    elif query.data == 'scam':
-        response = """⚠️ *10 Forex Scams to Avoid:*
-
-1. "Pay 50% upfront" ❌
-2. No physical office ❌
-3. Fake Telegram channels ❌
-4. Rates too good (e.g., $1 = 60 ETB) ❌
-5. Pressure tactics ("last chance") ❌
-6. No client testimonials ❌
-7. Asking for ID photos early ❌
-8. Western Union only ❌
-9. No escrow system ❌
-10. Unregistered businesses ❌
-
-✅ *Our Verified Agents:* /agent"""
-        
-    elif query.data == 'guide':
-        response = """📖 *EthiPay Ultimate Guide* - 500 ETB
-
-*What's inside:*
-✅ 47-page PDF with screenshots
-✅ Step-by-step payment setups
-✅ Tax calculation templates
-✅ Legal compliance checklist
-✅ Agent verification checklist
-✅ Sample client contracts
-
-*How to get it:*
-1. Send 500 ETB via Telebirr to *0961-393-003*
-2. Send payment screenshot here
-3. Receive guide within 5 minutes
-
-💰 *Bonus:* First 100 buyers get free consultation!"""
-        
-    elif query.data == 'agent':
-        response = """🤝 *Verified Forex Agents*
-
-1️⃣ *Addis Forex Solutions* (Addis)
-   • Rate: $1 = 57.1 ETB
-   • Min: $100
-   • Commission: 9%
-   • Contact: @AddisForexAgent
-
-2️⃣ *Safe Transfer Ethiopia* (Online)
-   • Rate: $1 = 57.0 ETB
-   • Min: $50
-   • Commission: 8.5%
-   • Contact: @SafeTransferET
-
-3️⃣ *Diaspora Bridge* (US/Canada focus)
-   • Rate: $1 = 57.3 ETB
-   • Min: $200
-   • Commission: 10%
-   • Contact: @DiasporaBridge
-
-⚠️ *Always ask for escrow!* Never pay 100% upfront.
-
-*Need help choosing?* Describe:
-• Amount: ______ USD
-• Location: ______
-• Urgency: ______"""
+    data = query.data
     
-    await query.edit_message_text(response, parse_mode='Markdown')
-
-async def handle_message(update: Update, context: CallbackContext):
-    text = update.message.text.lower()
+    if data == "upgrade":
+        await premium(update, context)
     
-    # Keyword matching
-    if any(word in text for word in ['paypal', 'pay pal', 'stripe', 'wise']):
-        response = """💸 *PayPal Solutions:*
+    elif data.startswith("upgrade_"):
+        # Handle upgrade selections
+        parts = data.split("_")
+        tier = parts[1]  # pro or enterprise
+        period = parts[2]  # monthly or yearly
         
-1. Family abroad method
-2. Payoneer bridge
-3. Direct transfer (not recommended)
-
-For detailed guide: /guide"""
+        price = PRICING[tier][period]
         
-    elif any(word in text for word in ['rate', 'forex', 'birr', 'dollar', 'exchange']):
-        response = f"💰 *Today's Rate:* $1 = {FOREX_RATES['our_rate']} ETB\nUpdated: {FOREX_RATES['updated']}\n\nNeed to exchange? /agent"
-        
-    elif any(word in text for word in ['scam', 'fake', 'fraud', 'trust', 'safe']):
-        response = "⚠️ *Avoid scams:* Never pay 100% upfront, verify office address, check testimonials.\n\nSafe agents: /agent"
-        
-    elif any(word in text for word in ['guide', 'book', 'pdf', 'tutorial']):
-        response = "📖 *Guide:* 500 ETB\nSend to: 0912-345-6789 via Telebirr\nThen send screenshot here!"
-        
-    elif any(word in text for word in ['agent', 'broker', 'exchange', 'change money']):
-        response = "🤝 Connect with verified agents:\n@AddisForexAgent\n@SafeTransferET\n\nSay @EthiPayBot sent you!"
-        
-    elif any(word in text for word in ['hello', 'hi', 'hey', 'start']):
-        response = "👋 Hello! I help Ethiopians get paid from abroad. Use /start for menu or ask about PayPal, rates, or agents."
-        
-    else:
-        response = f"🤔 *I understand you're asking about:* \"{text}\"\n\n*Try these:*\n• 'paypal' - Payment methods\n• 'rate' - Forex rates\n• 'guide' - Buy guide\n• 'agent' - Connect agents\n\nOr use /start for menu"
+        await query.edit_message_text(
+            f"✅ *Upgrade to {tier.upper()} {period.upper()}*\n\n"
+            f"Price: {price:,} ETB\n"
+            f"Billing: {period.capitalize()}\n\n"
+            f"*Payment Instructions:*\n"
+            f"1. Send {price:,} ETB to:\n"
+            f"   • telebirr: 0961393001\n"
+            f"   • CBE: 1000 645865603\n"
+            f"2. Forward payment receipt to @ShegerPayments\n"
+            f"3. We'll activate within 1 hour\n\n"
+            f"*Use code SHEGERLAUNCH for first month FREE!*",
+            parse_mode='Markdown'
+        )
     
-    # Add footer
-    footer = "\n\n📢 *Join:* @EthioPayments\n💎 *Premium:* /join"
+    elif data == "send_money":
+        await query.edit_message_text(
+            "💸 *Send Money*\n\n"
+            "Usage: `/send [amount] [phone_number]`\n"
+            "Example: `/send 500 0961393001`\n\n"
+            "We support:\n"
+            "• telebirr\n• M-Pesa\n• CBE Birr\n• Cash pickup",
+            parse_mode='Markdown'
+        )
     
-    await update.message.reply_text(response + footer, parse_mode='Markdown')
+    elif data == "marketplace":
+        await market(update, context)
 
-async def help_command(update: Update, context: CallbackContext):
-    await update.message.reply_text(
-        "ℹ️ *Available Commands:*\n\n"
-        "/start - Main menu\n"
-        "/rates - Current forex rates\n"
-        "/guide - Buy payment guide (500 ETB)\n"
-        "/agent - Connect with agents\n"
-        "/join - Premium group (2000 ETB/month)\n\n"
-        "*Or just type your question!*",
-        parse_mode='Markdown'
-    )
-
-async def rates_command(update: Update, context: CallbackContext):
-    await update.message.reply_text(
-        f"📊 *Rates ({FOREX_RATES['updated']}):*\n\n"
-        f"• Black Market: {FOREX_RATES['black_market']} ETB\n"
-        f"• Bank Rate: {FOREX_RATES['bank_rate']} ETB\n"
-        f"• Our Rate: {FOREX_RATES['our_rate']} ETB ✅",
-        parse_mode='Markdown'
-    )
-
+# ======================
+# MAIN FUNCTION
+# ======================
 def main():
-    print("🚀 Starting EthioPay Bot...")
+    """Start the bot."""
+    # Create the Application
+    TOKEN = os.getenv("8175654585:AAHkKi9IVa1C0vCknGHQ9ildFgsiwXvmXG4")
+    if not TOKEN:
+        logger.error("TELEGRAM_TOKEN environment variable not set!")
+        return
     
-    # Create application
-    application = Application.builder().token(TOKEN).build()
+    app = Application.builder().token(TOKEN).build()
     
-    # Add handlers
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("rates", rates_command))
-    application.add_handler(CommandHandler("guide", lambda u, c: u.message.reply_text("Guide: 500 ETB\nSend to: 0912-345-6789")))
-    application.add_handler(CommandHandler("agent", lambda u, c: u.message.reply_text("Agents:\n@AddisForexAgent\n@SafeTransferET")))
-    application.add_handler(CommandHandler("join", lambda u, c: u.message.reply_text("Premium: 2000 ETB/month\nBenefits: Daily alerts, priority support")))
+    # Add command handlers
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("premium", premium))
+    app.add_handler(CommandHandler("send", send_money))
+    app.add_handler(CommandHandler("market", market))
+    app.add_handler(CommandHandler("profile", profile))
+    app.add_handler(CommandHandler("help", help_command))
     
-    application.add_handler(CallbackQueryHandler(button))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    # Add button handler
+    app.add_handler(CallbackQueryHandler(button_handler))
     
-    print("✅ Bot setup complete!")
-    print("🤖 Starting polling...")
-    
-    # Run bot
-    application.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
+    # Start the bot
+    logger.info("Starting SHEGER Bot...")
+    app.run_polling()
 
-if __name__ == '__main__':
-    try:
-        main()
-    except Exception as e:
-        print(f"❌ Bot crashed: {e}")
-        import traceback
-        traceback.print_exc()
+if __name__ == "__main__":
+    main()
