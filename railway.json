@@ -1,8 +1,26 @@
 {
+  "$schema": "https://railway.app/railway.schema.json",
   "build": {
     "builder": "NIXPACKS"
   },
   "deploy": {
-    "startCommand": "python bot.py"
+    "numReplicas": 1,
+    "startCommand": "python bot.py",
+    "healthcheckPath": "/health",
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 3
+  },
+  "env": {
+    "TELEGRAM_TOKEN": {
+      "description": 8175654585:AAHkKi9IVa1C0vCknGHQ9ildFgsiwXvmXG4
+    },
+    "ENVIRONMENT": {
+      "description": "Runtime environment",
+      "value": "production"
+    },
+    "ADMIN_USER_ID": {
+      "description": 7714584854,
+      "required": false
+    }
   }
 }
