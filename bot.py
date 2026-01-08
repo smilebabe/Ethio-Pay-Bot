@@ -14,15 +14,15 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler
 # ======================
 # CONFIGURATION - FINAL & CORRECT
 # ======================
-TELEBIRR = "0961393001"                        # ✅ Your telebirr
-CBE = "1000645865603"                          # ✅ Your CBE account
-ADMIN_ID = 7714584854                          # ✅ Your Telegram ID
+TELEBIRR = "0961393001"            # ✅ Your telebirr
+CBE = "1000645865603"              # ✅ Your CBE account
+ADMIN_ID = 7714584854              # ✅ Your Telegram ID
 
 # CORRECTED CHANNELS (Use @username format)
-SUPPORT = "https://t.me/ShegerESupport"        # ✅ Your support channel
-PAYMENTS = "https://t.me/ShegerPayments"       # ✅ Your payments channel  
-SALES = "https://t.me/ShegerESales"            # ✅ Your sales channel
-NEWS = "https://t.me/ShegeErNews"              # ✅ Your news channel
+SUPPORT = "@ShegerESupport"        # ✅ Your support channel
+PAYMENTS = "@ShegerPayments"       # ✅ Your payments channel  
+SALES = "@ShegerESales"            # ✅ Your sales channel
+NEWS = "@ShegeErNews"              # ✅ Your news channel
 
 BOT_NAME = "SHEGER ET"
 BOT_USERNAME = "@ShegerETBot"
