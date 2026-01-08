@@ -86,7 +86,7 @@ async def start(update: Update, context):
          InlineKeyboardButton("🛍️ MARKETPLACE", callback_data="market")],
         [InlineKeyboardButton("🔧 FIND WORK", callback_data="jobs"),
          InlineKeyboardButton("🏠 PROPERTIES", callback_data="property")],
-        [InlineKeyboardButton("📞 SUPPORT", url=f"https://t.me/ShegerSupport"),
+        [InlineKeyboardButton("📞 SUPPORT", url=f"https://t.me/ShegerESupport"),
          InlineKeyboardButton("📊 STATS", callback_data="stats")]
     ]
     
