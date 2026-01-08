@@ -183,7 +183,36 @@ async def button_handler(update: Update, context):
     
     # Handle button clicks
     if query.data == "premium":
-        await premium(update, context)
+        # FIXED: Premium upgrade menu
+        keyboard = [
+            [InlineKeyboardButton("🚀 PRO - 149 ETB/month", callback_data="upgrade_pro")],
+            [InlineKeyboardButton("🏢 BUSINESS - 999 ETB/month", callback_data="upgrade_business")],
+            [InlineKeyboardButton("📞 CONTACT SALES", callback_data="contact")]
+        ]
+        
+        text = f"""🚀 *{BOT_NAME} PREMIUM*
+
+*1. SHEGER PRO* - 149 ETB/month
+• Fee: 1.5% (Basic: 2.5%)
+• Unlimited listings
+• Priority support
+• Business badge
+• 50K ETB daily limit
+
+*2. SHEGER BUSINESS* - 999 ETB/month
+• Fee: 0.8% (Lowest!)
+• Bulk payments
+• Business dashboard
+• Dedicated manager
+• API access
+
+*🎁 LAUNCH OFFER:*
+First month FREE!
+Code: *SHEGERLAUNCH*
+
+*💯 7-day money back guarantee*"""
+        
+        await query.edit_message_text(text, parse_mode='Markdown', reply_markup=InlineKeyboardMarkup(keyboard))
     
     elif query.data == "upgrade_pro":
         # Track pending payment
@@ -484,7 +513,6 @@ Saturday: 9:00 AM - 1:00 PM EAT
 Tap UPGRADE for better features!"""
         
         await query.edit_message_text(text, parse_mode='Markdown')
-
 # ======================
 # ADMIN COMMANDS
 # ======================
