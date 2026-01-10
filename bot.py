@@ -1927,7 +1927,7 @@ async def wallet_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 *Withdrawal Fee:* {withdrawal_fee}%
 
 *Balance Summary:*
-💳 Available Balance: {stats.get('balance', 0):.0f} ETB
+- Available Balance: {stats.get('balance', 0):.0f} ETB
 📈 Total Earned: {stats.get('total_earned', 0):.0f} ETB
 💸 Total Spent: {stats.get('total_spent', 0):.0f} ETB
 🏦 Max Balance Limit: {stats.get('max_balance', 10000):,.0f} ETB
