@@ -1900,7 +1900,7 @@ async def tier_recommendation_engine(update: Update, context: ContextTypes.DEFAU
         await update.message.reply_text(text, parse_mode='Markdown', reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def wallet_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """User wallet dashboard"""
+    """User wallet dashboard - Fixed for Railway"""
     query = update.callback_query
     await query.answer()
     
@@ -1913,31 +1913,38 @@ async def wallet_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     withdrawal_fee = withdrawal_fees.get(user_tier, 1.0)
     
     keyboard = [
-        [InlineKeyboardButton("📥 ADD FUNDS", callback_data="add_funds"),
-         InlineKeyboardButton("📤 WITHDRAW", callback_data="withdraw_funds")],
-        [InlineKeyboardButton("📋 TRANSACTION HISTORY", callback_data="transactions")],
-        [InlineKeyboardButton("💰 FAMILY WALLET", callback_data="family_wallet"),
-         InlineKeyboardButton("📊 WALLET ANALYTICS", callback_data="wallet_analytics")],
-        [InlineKeyboardButton("🔙 BACK", callback_data="back_to_main")]
+        [InlineKeyboardButton("ADD FUNDS", callback_data="add_funds"),
+         InlineKeyboardButton("WITHDRAW", callback_data="withdraw_funds")],
+        [InlineKeyboardButton("TRANSACTION HISTORY", callback_data="transactions")],
+        [InlineKeyboardButton("FAMILY WALLET", callback_data="family_wallet"),
+         InlineKeyboardButton("WALLET ANALYTICS", callback_data="wallet_analytics")],
+        [InlineKeyboardButton("BACK", callback_data="back_to_main")]
     ]
     
-    text = f""" *YOUR SHEGER WALLET*
+    # FIXED: Proper f-string formatting
+    balance = float(stats.get('balance', 0))
+    total_earned = float(stats.get('total_earned', 0))
+    total_spent = float(stats.get('total_spent', 0))
+    max_balance = float(stats.get('max_balance', 10000))
+    family_balance = float(stats.get('family_balance', 0))
+    
+    text = f"""*YOUR SHEGER WALLET*
 
 *Tier:* {user_tier.upper()}
 *Withdrawal Fee:* {withdrawal_fee}%
 
 *Balance Summary:*
- Available Balance: {stats.get('balance', 0):.0f} ETB
- Total Earned: {stats.get('total_earned', 0):.0f} ETB
- Total Spent: {stats.get('total_spent', 0):.0f} ETB
- Max Balance Limit: {stats.get('max_balance', 10000):,.0f} ETB
- Family Balance: {stats.get('family_balance', 0):,.0f} ETB
+Available Balance: {balance:.2f} ETB
+Total Earned: {total_earned:.2f} ETB
+Total Spent: {total_spent:.2f} ETB
+Max Balance Limit: {max_balance:,.2f} ETB
+Family Balance: {family_balance:,.2f} ETB
 
 *Withdrawal Info:*
-• Min: 100 ETB
-• Fee: {withdrawal_fee}%
-• Time: {'Instant' if user_tier == 'pro' else '24 hours'}
-• Methods: telebirr, CBE
+- Min: 100 ETB
+- Fee: {withdrawal_fee}%
+- Time: {'Instant' if user_tier == 'pro' else '24 hours'}
+- Methods: telebirr, CBE
 
 *Upgrade to Pro for instant withdrawals!*"""
     
