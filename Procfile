@@ -1,1 +1,2 @@
-bot: python bot.py
+web: python health.py
+worker: python bot.py
