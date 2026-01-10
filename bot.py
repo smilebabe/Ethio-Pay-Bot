@@ -1921,7 +1921,7 @@ async def wallet_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("🔙 BACK", callback_data="back_to_main")]
     ]
     
-    text = f"""💰 *YOUR SHEGER WALLET*
+    text = f""" *YOUR SHEGER WALLET*
 
 *Tier:* {user_tier.upper()}
 *Withdrawal Fee:* {withdrawal_fee}%
