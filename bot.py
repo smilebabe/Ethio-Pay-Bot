@@ -1879,11 +1879,11 @@ async def tier_recommendation_engine(update: Update, context: ContextTypes.DEFAU
     text += f"""
 
 *Additional Benefits:*
-• Higher transaction limits
-• More marketplace listings
-• Better referral commissions
-• Priority support
-• Advanced analytics"""
+- Higher transaction limits
+- More marketplace listings
+- Better referral commissions
+- Priority support
+- Advanced analytics"""
 
     if recommendation == 'pro':
         text += "\n• Dedicated account manager"
