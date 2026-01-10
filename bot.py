@@ -1928,10 +1928,10 @@ async def wallet_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 *Balance Summary:*
 - Available Balance: {stats.get('balance', 0):.0f} ETB
-📈 Total Earned: {stats.get('total_earned', 0):.0f} ETB
-💸 Total Spent: {stats.get('total_spent', 0):.0f} ETB
-🏦 Max Balance Limit: {stats.get('max_balance', 10000):,.0f} ETB
-👨‍👩‍👧‍👦 Family Balance: {stats.get('family_balance', 0):,.0f} ETB
+- Total Earned: {stats.get('total_earned', 0):.0f} ETB
+- Total Spent: {stats.get('total_spent', 0):.0f} ETB
+- Max Balance Limit: {stats.get('max_balance', 10000):,.0f} ETB
+- Family Balance: {stats.get('family_balance', 0):,.0f} ETB
 
 *Withdrawal Info:*
 • Min: 100 ETB
